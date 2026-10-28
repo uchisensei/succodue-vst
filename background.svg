@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SUCCO plugin - background gradient tile, dark purple theme -->
+<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#341a4a"/>
+      <stop offset="60%" stop-color="#1a0d24"/>
+      <stop offset="100%" stop-color="#0d0515"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#42225e" stroke-width="0.5" opacity="0.4"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="400" fill="url(#bgGrad)"/>
+  <rect width="800" height="400" fill="url(#grid)"/>
+</svg>
