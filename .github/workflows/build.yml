@@ -1,1 +1,101 @@
+name: Build SUCCO VST3
 
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: SuccoDue2-Windows
+            cmake_extra: ''
+          - os: macos-latest
+            artifact_name: SuccoDue2-macOS-Universal
+            cmake_extra: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15'
+          - os: ubuntu-22.04
+            artifact_name: SuccoDue2-Linux
+            cmake_extra: ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install build deps (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y cmake ninja-build libasound2-dev libjack-jackd2-dev libsndfile1-dev libfreetype6-dev libx11-dev libxinerama-dev libxext-dev libxrandr-dev libxcursor-dev libxcomposite-dev libxrender-dev libwebkit2gtk-4.1-dev pkg-config
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          mkdir -p build
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSUCCO_BUILD_VST3=ON -DSUCCO_BUILD_STANDALONE=ON -DSUCCO_COPY_PLUGIN_AFTER_BUILD=OFF ${{ matrix.cmake_extra }}
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Debug - list everything in build/
+        shell: bash
+        run: |
+          set +e  # never fail this step, even if find/head has pipe issues
+          echo "===== build/ tree (depth 5) ====="
+          find build -maxdepth 5 -type f -o -type d 2>/dev/null | head -100 || true
+          echo ""
+          echo "===== Looking for any .vst3 / .component / SUCCO standalone ====="
+          find build -name '*.vst3' -o -name '*.component' -o -name 'SUCCO.exe' -o -name 'SUCCO' -type f 2>/dev/null | head -20 || true
+          echo ""
+          echo "===== JUCE artefacts dir candidates ====="
+          ls -la build/SUCCO_artefacts 2>/dev/null || echo "build/SUCCO_artefacts NOT FOUND"
+          ls -la build/SUCCO_artifacts 2>/dev/null || echo "build/SUCCO_artifacts (American spelling) NOT FOUND"
+          find build -name '*_artefacts' -o -name '*_artifacts' -type d 2>/dev/null || true
+          true  # force success
+
+      - name: Upload all build artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            build/**_artefacts/
+            build/**_artifacts/
+            build/**/*.vst3
+            build/**/*.component
+            build/**/SUCCO*
+            build/**/SUCCO*.exe
+            build/**/SUCCO*Standalone*
+          retention-days: 30
+          if-no-files-found: warn
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
